@@ -430,10 +430,14 @@ class SapperSolver(SapperUserSolver):
             x = rd.randint(0, self._height - 1)
             y = rd.randint(0, self._width - 1)
 
-            self._generate_field(x, y)
-            self.__strategic_field = [[-2 for _ in range(self._width)] for _ in range(self._height)]
             self._current_field = [["X" for _ in range(self._width)] for _ in range(self._height)]
+            self.__strategic_field = [[-2 for _ in range(self._width)] for _ in range(self._height)]
+            self._generate_field(x, y)
             self.__open(x, y)
+            print(f"Решатель открывает клетку ({x + 1},"
+                  f" {y + 1})")
+
+            print(tabulate(self._field))
 
         is_win = True
         while True:
@@ -472,21 +476,18 @@ class SapperSolver(SapperUserSolver):
 
     # Выбираем клетку, которую открыть или поставить флаг
     def __choose_cell(self):
-        probabilities = [[100 for _ in range(self._width)] for _ in range(self._height)]
+        count_options = [[0 for _ in range(self._width)] for _ in range(self._height)]
+        sum_options = [[100 for _ in range(self._width)] for _ in range(self._height)]
         bombs_coord = []
 
         for i, array in enumerate(self.__strategic_field):
             for j, cell in enumerate(array):
-                # Если клетка закрыта, то вычисляем вероятность
+                # Если клетка закрыта, то вычисляем вероятность не попасть в бомбу
                 if cell == -2:
-                    for coord in self.__get_coords(i, j):
-                        x, y = coord[0], coord[1]
-
-                        if self.__strategic_field[x][y] > 0:
-                            if probabilities[i][j] == 100:
-                                probabilities[i][j] = 0
-
-                            probabilities[i][j] += self.__strategic_field[x][y]
+                    # Кол-во открытых чисел рядом с закрытой
+                    for x, y in self.__get_coords(i, j):
+                        if self._current_field[x][y] != "X" and self._current_field[x][y] != "F":
+                            count_options[i][j] += 1
 
                 # Если клетка закрыта или на ней стоит флаг или она открыта со всех сторон
                 if cell < 0:
@@ -502,8 +503,15 @@ class SapperSolver(SapperUserSolver):
 
                 for x, y in self.__get_coords(i, j):
                     if self.__strategic_field[x][y] == -2:
+                        # Проверяем, возможные бомбы
                         count_x += 1
                         temp_bombs_coord.append((x, y))
+
+                        # Добвляем к закрытой клетке
+                        if sum_options[x][y] == 100:
+                            sum_options[x][y] = 0
+
+                        sum_options[x][y] += strategic_cell
 
                 if count_x == strategic_cell and len(temp_bombs_coord) != 0:
                     for cur_x, cur_y in temp_bombs_coord:
@@ -514,17 +522,26 @@ class SapperSolver(SapperUserSolver):
 
         min_p = 100
         coord = ()
-        for x, arr in enumerate(probabilities):
-            for y, prob in enumerate(arr):
-                if min_p > prob:
-                    min_p = prob
-                    coord = (x, y)
+
+        for i in range(self._height):
+            for j in range(self._width):
+                if count_options[i][j] != 0 and sum_options[i][j] != 0 \
+                        and self.__strategic_field[i][j] != -1 and self.__strategic_field[i][j] == -2:
+                    x = sum_options[i][j] / count_options[i][j]
+                else:
+                    continue
+
+                if min_p > x:
+                    min_p = x
+                    coord = (i, j)
 
         return coord, None
 
     # Ставим флаги на координаты в coord_bombs
     def __set_flags(self, coord_bombs):
         for x, y in coord_bombs:
+            if self.__strategic_field[x][y] == -1:
+                continue
             self.__strategic_field[x][y] = -1
             self._current_field[x][y] = "F"
 
@@ -554,8 +571,11 @@ class SapperSolver(SapperUserSolver):
                 self._count_move += 1
                 is_open = True
 
-                print(f"Решатель открывает клетку ({i}, {j})")
+                print(f"Решатель открывает клетку ({i + 1}, {j + 1})")
                 self.__minus_bomb(x, y)
+
+                if self._current_field[i][j] == "0":
+                    self.__open_new_items(i, j)
 
         return is_open
 
